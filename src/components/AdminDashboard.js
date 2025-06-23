@@ -151,10 +151,19 @@ const AdminDashboard = ({ navigate }) => {
 
         if (activeTab === 'materials') {
           console.log("AdminDashboard (vNEW.11): Fetching 'materials' tab data.");
-          // This path aligns with where AdminDashboard writes and where Quizzes/Materials reads
           const materialsColRef = collection(db, `artifacts/${appId}/public/data/materials`);
           const unsubscribeMaterials = onSnapshot(materialsColRef, (snapshot) => {
-            const fetchedMaterials = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            // FIX: Ensure doc.id is always used as the 'id' for the React state object,
+            // even if there's an 'id' field within the document's data that might be null/undefined.
+            const fetchedMaterials = snapshot.docs
+              .filter(docSnap => docSnap.id) // Filter out documents without a valid actual Firestore ID
+              .map(docSnap => {
+                const { id, ...dataWithoutId } = docSnap.data(); // Destructure to exclude 'id' field from data, if it exists
+                return {
+                  id: docSnap.id, // Always use the actual Firestore document ID
+                  ...dataWithoutId // Spread the rest of the document's data
+                };
+              });
             setMaterials(fetchedMaterials);
             setLoadingData(false);
           }, (error) => {
@@ -453,7 +462,8 @@ const AdminDashboard = ({ navigate }) => {
   };
 
   const handleEditMaterial = (material) => {
-    setMaterialForm(material);
+    // Ensure the material ID is correctly captured for editing
+    setMaterialForm(material); 
     setIsMaterialModalOpen(true);
   };
 
@@ -462,59 +472,55 @@ const AdminDashboard = ({ navigate }) => {
     setErrorMessage('');
     setSuccessMessage('');
 
-    // Add debug log to confirm function call
-    console.log("AdminDashboard: handleSaveMaterial called.");
-    console.log("AdminDashboard: Material form data:", materialForm);
-
     if (!db) {
-      console.error("AdminDashboard: Firestore DB is not initialized for saving material.");
       setErrorMessage("Firestore is not ready. Please try again.");
       return;
     }
 
     try {
-      if (!materialForm.title || !materialForm.type || !materialForm.url || !materialForm.subjectName || !materialForm.subjectType) {
+      const { title, type, url, subjectType, subjectName, id } = materialForm;
+
+      if (!title || !type || !url || !subjectType || !subjectName) {
         setErrorMessage("All material fields (Title, Type, URL, Subject Type, Subject Name) are required.");
-        console.warn("AdminDashboard: Required material fields are missing.");
         return;
       }
-      if (materialForm.subjectType === 'elective' && !allElectiveSubjects.includes(materialForm.subjectName)) {
+
+      if (subjectType === 'elective' && !allElectiveSubjects.includes(subjectName)) {
         setErrorMessage("Invalid elective subject name.");
-        console.warn("AdminDashboard: Invalid elective subject selected.");
         return;
       }
-      if (materialForm.subjectType === 'core' && !coreSubjects.includes(materialForm.subjectName)) {
+
+      if (subjectType === 'core' && !coreSubjects.includes(subjectName)) {
         setErrorMessage("Invalid core subject name.");
-        console.warn("AdminDashboard: Invalid core subject selected.");
         return;
       }
 
       const materialsColRef = collection(db, `artifacts/${appId}/public/data/materials`);
-      console.log("AdminDashboard: Attempting to save material to path:", materialsColRef.path);
 
-      if (materialForm.id) {
+      if (id) {
         // Update existing material
-        const materialDocRef = doc(materialsColRef, materialForm.id);
-        await setDoc(materialDocRef, materialForm, { merge: true });
+        const materialDocRef = doc(materialsColRef, id);
+        await setDoc(materialDocRef, { ...materialForm }, { merge: true });
         setSuccessMessage("Material updated successfully!");
-        console.log("AdminDashboard: Material updated successfully with ID:", materialForm.id);
       } else {
-        // Add new material
-        const newMaterialData = { ...materialForm, createdAt: new Date().toISOString() };
-        const docRef = await addDoc(materialsColRef, newMaterialData);
+        // Create new material with generated ID and store ID inside document
+        const newDocRef = doc(materialsColRef); // auto-generate a new ID
+        const newMaterial = {
+          ...materialForm,
+          id: newDocRef.id, // Explicitly add the generated Firestore document ID as a field
+          createdAt: new Date().toISOString()
+        };
+        await setDoc(newDocRef, newMaterial); // save with embedded ID
         setSuccessMessage("Material added successfully!");
-        console.log("AdminDashboard: New material added successfully with ID:", docRef.id);
       }
+
       setIsMaterialModalOpen(false);
     } catch (error) {
-      console.error("AdminDashboard: Error saving material:", error);
-      // More specific error messages for Firestore errors
+      console.error("Error saving material:", error);
       if (error.code === 'permission-denied') {
-        setErrorMessage("Permission denied: You do not have the necessary rights to add/update materials. Ensure your account is an admin and Firebase Security Rules allow this operation.");
-      } else if (error.code === 'unavailable') {
-        setErrorMessage("Service unavailable: Could not connect to Firestore. Check your internet connection.");
+        setErrorMessage("Permission denied: Ensure your account is an admin and Firebase Rules allow writing materials.");
       } else {
-        setErrorMessage(`Failed to save material: ${error.message}. Check console for details.`);
+        setErrorMessage(`Failed to save material: ${error.message}`);
       }
     }
   };
@@ -524,13 +530,29 @@ const AdminDashboard = ({ navigate }) => {
       setErrorMessage('');
       setSuccessMessage('');
       console.log("AdminDashboard: Attempting to delete material with ID:", materialId);
+      
+      // Add robust ID validation and type check
+      if (!materialId || typeof materialId !== 'string' || materialId.trim() === '') {
+        setErrorMessage("Cannot delete: Material ID is missing or invalid.");
+        console.error("AdminDashboard: Attempted to delete a material with a null/undefined/empty ID. Given ID:", materialId); // Added more detail to error log
+        return;
+      }
       if (!db) {
         console.error("AdminDashboard: Firestore DB is not initialized for deleting material.");
         setErrorMessage("Firestore is not ready. Please try again.");
         return;
       }
+      // This check is good, but relies on AuthContext's isAdmin.
+      // Firebase security rules are the ultimate enforcement.
+      if (!currentUser || !isAdmin) { 
+        console.error("AdminDashboard: Current user not authenticated or not an admin. Cannot delete material.");
+        setErrorMessage("You must be logged in as an administrator to delete materials.");
+        return;
+      }
       try {
-        await deleteDoc(doc(db, `artifacts/${appId}/public/data/materials`, materialId));
+        const materialDocRef = doc(db, `artifacts/${appId}/public/data/materials`, materialId);
+        console.log("AdminDashboard: Deleting material at document reference path:", materialDocRef.path);
+        await deleteDoc(materialDocRef);
         setSuccessMessage("Material deleted successfully!");
         console.log("AdminDashboard: Material deleted successfully with ID:", materialId);
       } catch (error) {
@@ -1012,7 +1034,7 @@ Option D`}
                 <tbody className="bg-white divide-y divide-gray-200">
                   {materials.length > 0 ? (
                     materials.map((material) => (
-                      <tr key={material.id}>
+                      <tr key={material.id}> {/* Ensure material.id is used as key */}
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{material.title}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{material.type}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{material.subjectType}</td>
