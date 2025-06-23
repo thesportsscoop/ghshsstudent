@@ -6,10 +6,11 @@ const Register = ({ navigate }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [yearGroup, setYearGroup] = useState(''); // New state for Year Group
-  const [shsProgram, setShsProgram] = useState(''); // New state for SHS Program
-  const [electiveSubjects, setElectiveSubjects] = useState([]); // New state for Elective Subjects
-  const [message, setMessage] = useState(''); // Local state for registration specific messages
+  const [yearGroup, setYearGroup] = useState('');
+  const [shsProgram, setShsProgram] = useState('');
+  const [electiveSubjects, setElectiveSubjects] = useState([]);
+  const [contactNumber, setContactNumber] = useState(''); // NEW state for contact number
+  const [message, setMessage] = useState('');
 
   // Predefined lists for dropdowns and electives
   const yearGroupOptions = ['Year 1', 'Year 2', 'Year 3'];
@@ -27,53 +28,66 @@ const Register = ({ navigate }) => {
     'Technical Drawing', 'Applied Electricity', 'Auto Mechanics'
   ];
 
-  // Function to handle elective subject selection (exactly 4)
   const handleElectiveChange = (e) => {
     const { value, checked } = e.target;
     if (checked) {
       if (electiveSubjects.length < 4) {
         setElectiveSubjects([...electiveSubjects, value]);
-        setMessage(''); // Clear message if selection is valid
+        setMessage('');
       } else {
         setMessage("You must select exactly 4 elective subjects. Uncheck an existing one to select a new one.");
       }
     } else {
       setElectiveSubjects(electiveSubjects.filter((subject) => subject !== value));
-      setMessage(''); // Clear message when unchecking
+      setMessage('');
     }
   };
 
-
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setMessage(''); // Clear previous local messages before a new attempt
+    setMessage('');
 
-    // Basic validation to ensure required fields are filled
-    if (!name || !email || !password || !yearGroup || !shsProgram) {
-      setMessage("Please fill in all required fields (Name, Email, Password, Year Group, SHS Program).");
+    // --- Enhanced Validation ---
+    if (!name.trim()) {
+      setMessage("Please enter your full name.");
       return;
     }
-    
-    // Validation for exactly 4 elective subjects
-    if (electiveSubjects.length !== 4) {
-      setMessage("Please select exactly 4 elective subjects.");
+    if (!email.trim()) {
+      setMessage("Please enter your email address.");
       return;
     }
-
+    if (!password) {
+      setMessage("Please enter a password.");
+      return;
+    }
     if (password.length < 6) {
         setMessage("Password must be at least 6 characters long.");
         return;
     }
+    if (!yearGroup) {
+      setMessage("Please select your Year Group.");
+      return;
+    }
+    if (!shsProgram) {
+      setMessage("Please select your SHS Program.");
+      return;
+    }
+    if (electiveSubjects.length !== 4) {
+      setMessage("Please select exactly 4 elective subjects.");
+      return;
+    }
+    // NEW Validation for Contact Number
+    if (!contactNumber.trim() || !/^\d{10}$/.test(contactNumber.trim())) { // Simple check for 10 digits only
+        setMessage("Please enter a valid 10-digit contact number (digits only).");
+        return;
+    }
 
-    // The register function from AuthContext is already configured to save data
-    // to the correct `gh-shs-student-74e82` appId path.
-    const result = await register(email, password, name, yearGroup, shsProgram, electiveSubjects);
+    // Pass contactNumber to the register function
+    const result = await register(email, password, name, yearGroup, shsProgram, electiveSubjects, contactNumber);
     if (result.success) {
       setMessage("Registration successful! Redirecting to dashboard...");
-      // navigate is called after a small delay to show message
-      setTimeout(() => navigate('dashboard'), 1500); // Redirect to dashboard after successful registration
+      setTimeout(() => navigate('dashboard'), 1500);
     } else {
-      // Set the local message to the error returned from AuthContext
       setMessage(result.error || "Registration failed. Please try again.");
     }
   };
@@ -123,7 +137,7 @@ const Register = ({ navigate }) => {
             />
           </div>
 
-          {/* New fields: Year Group */}
+          {/* Year Group Selector */}
           <div>
             <label htmlFor="yearGroup" className="block text-sm font-medium text-gray-700">Year Group</label>
             <select
@@ -141,7 +155,7 @@ const Register = ({ navigate }) => {
             </select>
           </div>
 
-          {/* New fields: SHS Program */}
+          {/* SHS Program Selector */}
           <div>
             <label htmlFor="shsProgram" className="block text-sm font-medium text-gray-700">SHS Program</label>
             <select
@@ -159,7 +173,7 @@ const Register = ({ navigate }) => {
             </select>
           </div>
 
-          {/* New fields: Elective Subjects (exactly 4) */}
+          {/* Elective Subjects (exactly 4) */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Elective Subjects (Select Exactly 4)</label>
             <div className="grid grid-cols-2 gap-2 text-sm text-gray-800">
@@ -181,6 +195,22 @@ const Register = ({ navigate }) => {
             {electiveSubjects.length > 0 && (
                 <p className="mt-2 text-gray-600 text-xs">Selected: {electiveSubjects.join(', ')}</p>
             )}
+          </div>
+
+          {/* NEW FIELD: Contact Number */}
+          <div>
+            <label htmlFor="contactNumber" className="block text-sm font-medium text-gray-700">Contact Number</label>
+            <input
+              id="contactNumber"
+              name="contactNumber"
+              type="tel" // Use type="tel" for phone numbers
+              autoComplete="tel"
+              required
+              value={contactNumber}
+              onChange={(e) => setContactNumber(e.target.value)}
+              className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-purple-500 focus:border-purple-500 text-base"
+              placeholder="e.g., 0551234567"
+            />
           </div>
 
           <div>
