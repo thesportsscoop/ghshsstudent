@@ -289,6 +289,7 @@ const QuizTaking = ({ navigate, quizId }) => {
               <li>You can skip questions and return to them later using the navigation panel on the right.</li>
               <li>Once the timer runs out, the quiz will be automatically submitted.</li>
               <li>You can only attempt each quiz **once**.</li>
+              <li>Once you click Start Quiz, you have to complete the quiz or you will be timed out.</li> 
               <li>Your answers will be automatically saved as you select them.</li>
             </ul>
             <button
