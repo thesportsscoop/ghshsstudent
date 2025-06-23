@@ -25,6 +25,8 @@ const Register = ({ navigate }) => {
     'Graphic Design', 'Sculpture', 'Textile',
     'Food & Nutrition', 'Management in Living',
     'Crop Husbandry', 'Animal Husbandry',
+    'Christian Religious Studies', 'Ghanaian Language',
+    'Elective Maths', 'General Knowledge in Arts',
     'Technical Drawing', 'Applied Electricity', 'Auto Mechanics'
   ];
 
