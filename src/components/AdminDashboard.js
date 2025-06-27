@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, getDocs, query, collectionGroup, writeBatch, getDoc, addDoc } from 'firebase/firestore';
+import AdminStats from './AdminStats'; // Import the new AdminStats component
 
 const AdminDashboard = ({ navigate }) => {
   const { currentUser, logout, db, userId, loadingAuth, isAdmin } = useAuth();
-  const [activeTab, setActiveTab] = useState('users'); // State for active tab: 'users', 'quizzes', 'materials'
+  // Added 'stats' to activeTab options
+  const [activeTab, setActiveTab] = useState('users'); // State for active tab: 'users', 'quizzes', 'materials', 'stats'
   const [users, setUsers] = useState([]); // State for all users
   const [quizzes, setQuizzes] = useState([]); // State for all quizzes
   const [materials, setMaterials] = useState([]); // State for all materials
@@ -173,6 +175,12 @@ const AdminDashboard = ({ navigate }) => {
           });
           unsubscribeFunctions.push(unsubscribeMaterials);
         }
+        
+        // No specific data fetch needed here for 'stats' tab in this useEffect
+        // The AdminStats component will handle its own data fetching.
+        if (activeTab === 'stats') {
+          setLoadingData(false); // Mark loading as false since AdminStats will handle its own.
+        }
 
       } catch (error) {
         console.error("AdminDashboard (vNEW.11): Error during data fetching and subscription setup (catch block):", error);
@@ -187,7 +195,7 @@ const AdminDashboard = ({ navigate }) => {
       console.log("AdminDashboard (vNEW.11): Cleaning up Firestore listeners.");
       unsubscribeFunctions.forEach(unsub => unsub());
     };
-  }, [db, currentUser, loadingAuth, isAdmin, appId, activeTab, navigate]);
+  }, [db, currentUser, loadingAuth, isAdmin, appId, activeTab, navigate, userId]); // Added userId to dependencies
 
 
   const handleAddQuiz = () => {
@@ -507,7 +515,7 @@ const AdminDashboard = ({ navigate }) => {
         const newDocRef = doc(materialsColRef); // auto-generate a new ID
         const newMaterial = {
           ...materialForm,
-          id: newDocRef.id, // Explicitly add the generated Firestore document ID as a field
+          id: newDocRef.id,
           createdAt: new Date().toISOString()
         };
         await setDoc(newDocRef, newMaterial); // save with embedded ID
@@ -602,7 +610,7 @@ const AdminDashboard = ({ navigate }) => {
     return null;
   }
 
-  if (loadingData) {
+  if (loadingData && activeTab !== 'stats') { // Only show loadingData if not on 'stats' tab
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
         <div className="text-xl font-semibold text-gray-700">Loading Admin Dashboard (Fetching Data)...</div>
@@ -641,6 +649,13 @@ const AdminDashboard = ({ navigate }) => {
                 Manage Materials
               </button>
             </li>
+            {/* NEW: Statistics Tab Button */}
+            <li>
+              <button onClick={() => setActiveTab('stats')} className={`flex items-center p-2 rounded-lg w-full text-left transition duration-200 ${activeTab === 'stats' ? 'bg-red-600 text-white' : 'text-red-200 hover:text-white'}`}>
+                <svg className="w-5 h-5 mr-3" fill="currentColor" viewBox="0 0 20 20"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"></path></svg>
+                Statistics
+              </button>
+            </li>
           </ul>
         </nav>
         <div className="mt-8">
@@ -664,6 +679,7 @@ const AdminDashboard = ({ navigate }) => {
           {activeTab === 'users' && 'User Management'}
           {activeTab === 'quizzes' && 'Quiz Management'}
           {activeTab === 'materials' && 'Material Management'}
+          {activeTab === 'stats' && 'Student Performance Statistics'} {/* Title for Stats tab */}
         </h2>
 
         {/* Success and Error Messages */}
@@ -680,7 +696,7 @@ const AdminDashboard = ({ navigate }) => {
           </div>
         )}
 
-        {/* User Management Tab Content */}
+        {/* Conditional Rendering of Tabs */}
         {activeTab === 'users' && (
           <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
             <h3 className="text-xl font-semibold text-gray-800 mb-4">All Registered Users</h3>
@@ -731,7 +747,6 @@ const AdminDashboard = ({ navigate }) => {
           </div>
         )}
 
-        {/* Quiz Management Tab Content */}
         {activeTab === 'quizzes' && (
           <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
             <div className="flex justify-between items-center mb-4">
@@ -751,28 +766,23 @@ const AdminDashboard = ({ navigate }) => {
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject Type</th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject Name</th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Questions</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Duration (s)</th> {/* Added Duration column */}
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Duration (s)</th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {quizzes.length > 0 ? (
                     quizzes.map((quiz) => {
-                      // This log helps confirm that the quiz objects received from Firestore
-                      // and passed into the state *do* have a valid ID.
-                      // If this still logs an empty/null ID, the issue is with the Firestore data itself or the SDK.
                       if (!quiz.id) {
                           console.error("AdminDashboard: Rendering a quiz with a null/undefined ID despite data filtering. Check Firestore data directly:", quiz);
                       }
                       return (
-                        // Use quiz.id directly as the key. The filter above ensures it's valid.
-                        // Fallback key is removed as it can mask real ID issues for React.
                         <tr key={quiz.id}> 
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{quiz.title}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{quiz.subjectType}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{quiz.subjectName}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{quiz.questions?.length || 0}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{quiz.duration || 'N/A'}</td> {/* Display duration */}
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{quiz.duration || 'N/A'}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-left text-sm font-medium">
                             <button onClick={() => handleEditQuiz(quiz)} className="text-indigo-600 hover:text-indigo-900 mr-4">Edit</button>
                             <button onClick={() => handleDeleteQuiz(quiz.id)} className="text-red-600 hover:text-red-900">Delete</button>
@@ -791,7 +801,7 @@ const AdminDashboard = ({ navigate }) => {
             {/* Quiz Modal */}
             {isQuizModalOpen && (
               <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-lg relative max-h-[90vh] overflow-y-auto"> {/* Added max-h and overflow-y */}
+                <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-lg relative max-h-[90vh] overflow-y-auto">
                   <h3 className="text-2xl font-bold mb-6 text-gray-800">{quizForm.id ? 'Edit Quiz' : 'Add New Quiz'}</h3>
                   <form onSubmit={handleSaveQuiz} className="space-y-4">
                     <div>
@@ -810,7 +820,7 @@ const AdminDashboard = ({ navigate }) => {
                       <select
                         id="subjectType"
                         value={quizForm.subjectType}
-                        onChange={(e) => setQuizForm({ ...quizForm, subjectType: e.target.value, subjectName: '' })} // Reset subjectName on type change
+                        onChange={(e) => setQuizForm({ ...quizForm, subjectType: e.target.value, subjectName: '' })}
                         className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
                         required
                       >
@@ -1007,7 +1017,6 @@ Option D`}
           </div>
         )}
 
-        {/* Material Management Tab Content */}
         {activeTab === 'materials' && (
           <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
             <div className="flex justify-between items-center mb-4">
@@ -1034,7 +1043,7 @@ Option D`}
                 <tbody className="bg-white divide-y divide-gray-200">
                   {materials.length > 0 ? (
                     materials.map((material) => (
-                      <tr key={material.id}> {/* Ensure material.id is used as key */}
+                      <tr key={material.id}>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{material.title}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{material.type}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{material.subjectType}</td>
@@ -1146,6 +1155,17 @@ Option D`}
               </div>
             )}
           </div>
+        )}
+
+        {/* Statistics Tab Content (NEW) */}
+        {activeTab === 'stats' && (
+            <AdminStats
+                db={db}
+                appId={appId}
+                coreSubjects={coreSubjects}
+                allElectiveSubjects={allElectiveSubjects}
+                // You can pass other props here as needed for filtering or display
+            />
         )}
       </div>
     </div>
